@@ -67,6 +67,8 @@ No engine source, only serving flags? This skill does not apply. No correctness 
    e. Warm up at load: full-size buffers and each kernel's first launch, then reset the state it wrote.
    f. Fuse launches that always follow each other.
    g. Prompt attention: one lane per query, the bias computed in the kernel.
+   h. Narrow formats (FP8, 4-bit) into the matrix cores by moving bits, not converting values; scales absorb the factor.
+   i. Check every path a setting switches: an option such as an FP8 cache can still run an old kernel.
 
 5. **Check the output before you believe the speed.**
    - Same ids as the old build at every length: go on.

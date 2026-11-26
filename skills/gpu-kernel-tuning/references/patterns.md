@@ -63,6 +63,15 @@ Bound the wait and write NaN when it runs out, so that a wrong assumption shows 
 One lane a query; keys as a matrix tile; the positional bias computed in the kernel, not read from a table. Not exact: it
 needs the gate and a KL comparison (SKILL.md, step 5). It gained 13% on an iGPU and nothing on a discrete card.
 
+## h. Low-precision formats into the matrix cores
+
+Recognise: a narrow format (FP8, a 4-bit code) is converted value by value before a matrix instruction, or a whole path
+still runs an older kernel only because its cache or weights are in that format.
+Move the bits instead of converting: E4M3 bits shifted into an FP16 word give the exact value divided by 256, subnormals
+included (`((x & 0x7F) << 7) | ((x & 0x80) << 8)`, two values per 32-bit word). Fold the factor into a scale that is
+applied anyway (the logit scale, the output scale). A first version that called a per-value conversion was 25% slower than
+the old kernel; the bit move made it 7-10% faster. Check that the format never holds NaN or infinity before you rely on it.
+
 ## CUDA
 
 The same patterns map as follows: WMMA intrinsics -> `nvcuda::wmma`; LDS -> shared memory; wave32 -> warp of 32; `sudot4` -> `__dp4a`. Measure launch cost

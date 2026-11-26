@@ -35,6 +35,10 @@ did not help (0 to -5%): what is left is traffic between kernels, not the produc
 Behind the server at a 64K context the same 4,096 filled the XT's 20 GB and prompts fell from 3,460 to 2,480: 3,072 was right there. The
 short benchmark had not shown it.
 
+FP8 cache, later: decode attention over it still ran emulated tensor-core code. On the matrix cores with values converted in
+software it was slower (8060S, 32K: 37.4 -> 28.4); with the bit move it was faster: XT 94.0 -> 103.2 (4K), 75 -> 81.5 (95K),
+same agreement with the reference.
+
 Mistakes: skipping launches as a probe wedged the XT. A short gate (96 positions) made a better attention look worse, and 3,072
 positions settled it (2,996 matches against 2,988). Benchmarks without the launcher's variables did not compare. Several
 short-prompt gains were the 55 ms first launch. Saved logits filled the disk.
