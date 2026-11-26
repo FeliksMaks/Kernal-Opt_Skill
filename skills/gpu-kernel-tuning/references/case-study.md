@@ -39,6 +39,9 @@ FP8 cache, later: decode attention over it still ran emulated tensor-core code. 
 software it was slower (8060S, 32K: 37.4 -> 28.4); with the bit move it was faster: XT 94.0 -> 103.2 (4K), 75 -> 81.5 (95K),
 same agreement with the reference.
 
+Bias table, later: the prompt attention read a 400 MB-a-layer F32 bias table. Computing the bias in the kernel, in the
+table's order, kept every token and gave the 8060S 1,426 -> 1,621 tok/s at 4K, while the XT lost 6%: on by GPU type.
+
 Mistakes: skipping launches as a probe wedged the XT. A short gate (96 positions) made a better attention look worse, and 3,072
 positions settled it (2,996 matches against 2,988). Benchmarks without the launcher's variables did not compare. Several
 short-prompt gains were the 55 ms first launch. Saved logits filled the disk.

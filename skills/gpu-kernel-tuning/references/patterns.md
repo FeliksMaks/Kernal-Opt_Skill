@@ -45,6 +45,10 @@ formats went expert by expert. Make the tile's decode a template on the weight t
 
 Recognise: gather, pack, unpack and concat kernels around the products.
 Pass the index to the consumer (`row = idx[r]`), and an output pointer and stride for each part. Exact by construction.
+A table that one kernel writes and the next reads (a positional bias of tokens x heads x distances, hundreds of MB) can
+often be computed where it is used, in the same order of operations: exact. That trades memory traffic for arithmetic, so
+it pays where the kernel waits for memory (an iGPU: +11-14%) and can lose where it does not (a discrete card: -6%). Make
+the choice per GPU.
 
 ## e. Warm-up at load
 
