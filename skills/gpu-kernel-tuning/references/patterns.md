@@ -76,6 +76,32 @@ included (`((x & 0x7F) << 7) | ((x & 0x80) << 8)`, two values per 32-bit word). 
 applied anyway (the logit scale, the output scale). A first version that called a per-value conversion was 25% slower than
 the old kernel; the bit move made it 7-10% faster. Check that the format never holds NaN or infinity before you rely on it.
 
+## j. A compiled kernel for every weight format the token path meets
+
+Recognise: a new file (another quant of the same model) is much slower than the old one, and a side-by-side profile
+shows the time in groups whose kernels pick the weight type at run time. Look for a `switch` or `if` chain on the type
+that lists the old file's formats only: the others fall to a general path that decodes value by value, with more
+registers and no batching.
+Add the new formats to the compile-time list (a template argument, one kernel per type) and give each a sub-block dot
+in the shape of the existing ones. Exact when the dot sums in the same order as the general path; compare the ids.
+Here: IQ3_XXS and IQ4_NL experts, 82 -> 103 tok/s, the same ids.
+
+## k. Requantize odd dense formats at load
+
+Recognise: the dense weights of the new file are a mix of formats (K-quants of several widths, BF16) and the fused fast
+path takes one format only, so a fused projection is split into segments, one launch each.
+Convert them to that format once at load (here Q8_0 with ggml's `quantize_row_q8_0`: amax / 127 a block of 32, FP16
+scale, round to nearest) and put the parts back into one matrix. Not exact: the values move by up to half a step of the
+8-bit grid (well under the 3-6 bit file's own error), so gate it, keep a switch that loads the file as it is, and make it
+the default only for the files it was gated on. It costs load time (single-threaded on the host: +9 s here).
+Here: 65 -> 82 tok/s, reference agreement unchanged within near ties.
+
+## When a smaller format does not help
+
+Compute bytes per token / bandwidth first. If the token time is several times that, decode is bound by per-step cost
+(sequential layers, small kernels, launches) and a smaller quant will not be faster; it only helps where the larger file
+does not fit in VRAM. Tell the user before they expect a speed-up from a smaller file.
+
 ## CUDA
 
 The same patterns map as follows: WMMA intrinsics -> `nvcuda::wmma`; LDS -> shared memory; wave32 -> warp of 32; `sudot4` -> `__dp4a`. Measure launch cost

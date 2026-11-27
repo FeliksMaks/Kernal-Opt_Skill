@@ -8,6 +8,9 @@ It was written from a complete optimization of an MoE engine on AMD GPUs (Inklin
 Radeon 8060S, HIP): decode 94 -> 109 tok/s and 4K-token prompts 650 -> 3,800 tok/s on the RX 7900 XT, every step checked
 against llama.cpp. The method is not tied to that model or vendor; `references/any-model.md` maps it to other
 architectures, weight formats, GPUs and engines, and marks what was tested.
+Since then it was applied to a second quant of the same model (ISTA-DASLab's GSQ-RCO file: decode 65 -> 103 tok/s on
+the RX 7900 XT) and to a second model in another engine (Ling-3.2-air on two GPUs: 4K prompts 460 -> 810 tok/s);
+`references/case-study-2.md` has both.
 
 ## Contents
 
@@ -18,6 +21,8 @@ skills/gpu-kernel-tuning/
   references/patterns.md         the code patterns that paid (batched loads, matrix-core tiles, fewer copies, warm-up, fusion)
   references/correctness-gate.md the teacher-forced token check against llama.cpp
   references/case-study.md       the case it was written from: numbers, dropped attempts, mistakes, how the skill was tested
+  references/case-study-2.md     a second quant of the same model and a second model (hybrid MoE, two GPUs): what paid,
+                                 what did not, why a smaller quant was not faster, and mistakes to avoid
   scripts/ab.py                  alternating A/B of engine commands: medians, spread, identical-output check
   scripts/make_reference.py      greedy reference with top-5 log-probabilities from a running llama-server
   scripts/score.py               teacher-forced agreement of an engine with that reference

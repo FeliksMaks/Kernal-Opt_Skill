@@ -33,7 +33,8 @@ No engine source, only serving flags? This skill does not apply. No correctness 
 ## Steps
 
 0. **Worksheet.** Fill in `references/any-model.md` for this model, file and machine, from the header and measurements.
-   You should see: a weight type for every tensor group and layer, and no empty ceiling row.
+   You should see: a weight type for every tensor group and layer, and no empty ceiling row. A new file of a model the
+   engine already runs: list the formats it adds and check that every kernel switch knows them.
 
 1. **Baseline.** Pick the GPU by name (HIP's device order can change between boots) and check that nothing else uses it.
    Run prompts of ~30, ~500, ~4,000 and ~32,000 tokens (as far as the context allows), >= 200 generated tokens, greedy, with
@@ -69,6 +70,9 @@ No engine source, only serving flags? This skill does not apply. No correctness 
    g. Prompt attention: one lane per query, the bias computed in the kernel.
    h. Narrow formats (FP8, 4-bit) into the matrix cores by moving bits, not converting values; scales absorb the factor.
    i. Check every path a setting switches: an option such as an FP8 cache can still run an old kernel.
+   j. A new quant of the same model: give each of its weight formats a compiled kernel; the old list leaves them on the
+      general path.
+   k. Dense weights in a mix of formats: requantize to the fast path's format at load, gated, with a switch.
 
 5. **Check the output before you believe the speed.**
    - Same ids as the old build at every length: go on.
@@ -102,6 +106,15 @@ No engine source, only serving flags? This skill does not apply. No correctness 
 - Don't trust one short-prompt number: at 128-511 tokens the spread can be 20%, and the first launch hides in it.
 - Don't keep the logit dumps of a gate run. Long ones filled a disk with 42 GB. Delete each after scoring.
 - Don't compare with another engine's published number. Run it on this machine with the same file and lengths.
+- Don't report a speed before the gate. A new file whose loop keys the engine did not find ran each layer once and was
+  "faster"; only the gate (70%) showed it.
+- Don't trust an A/B whose configs give identical ids and speed when the change is not exact: check that each run loaded
+  the model and settings you meant.
+- Don't promise a speed-up from a smaller quant before you compare bytes per token with the token time
+  (`references/case-study-2.md`). Where decode is bound by per-step cost, the smaller file only helps when it fits where the
+  larger one does not.
+- Don't assume matrix-core tiles win for every product: with many experts and few rows each, a tile can be slower than
+  the token-style kernel. Measure each matrix separately.
 
 ## Verify before you say you are done
 
@@ -117,6 +130,8 @@ Then reply with a table (length x GPU: before, after), matches / positions, what
 - `references/correctness-gate.md` - the teacher-forced token check against llama.cpp.
 - `references/patterns.md` - code for step 4, and how to recognise each case.
 - `references/case-study.md` - the Inkling port: numbers, dead ends, mistakes; how this skill was tested.
+- `references/case-study-2.md` - a second quant of the same model, a second model (hybrid MoE on two GPUs), and the
+  mistakes made on the way.
 - `scripts/kregs.py` - registers, spills and shared memory per kernel of a built exe (AMD).
 - `scripts/matrix_peak.hip`, `scripts/tile_layers.hip` - the matrix cores' real rate, and what a tile loses to each part (RDNA 3).
 - `scripts/make_reference.py`, `scripts/score.py` - a llama.cpp reference and the token gate.
