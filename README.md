@@ -9,7 +9,8 @@ Radeon 8060S, HIP): decode 94 -> 109 tok/s and 4K-token prompts 650 -> 3,800 tok
 against llama.cpp. The method is not tied to that model or vendor; `references/any-model.md` maps it to other
 architectures, weight formats, GPUs and engines, and marks what was tested.
 Since then it was applied to a second quant of the same model (ISTA-DASLab's GSQ-RCO file: decode 65 -> 103 tok/s on
-the RX 7900 XT) and to a second model in another engine (Ling-3.2-air on two GPUs: 4K prompts 460 -> 810 tok/s);
+the RX 7900 XT) and to a second model in another engine (Ling-3.2-air on a Strix Halo iGPU plus an RX 7900 XT over
+USB4: 4K prompts 460 -> 810 tok/s, decode 51.7 -> 64.2 tok/s from one stream join inside the token graph);
 `references/case-study-2.md` has both.
 
 ## Contents

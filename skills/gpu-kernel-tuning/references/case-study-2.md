@@ -82,3 +82,47 @@ The engine already worked (CUDA source built for HIP). Prompt speed at 4,096 tok
 What to watch for with hybrid models: the linear-attention recurrence and the MLA layers have their own kernels and
 their own shapes. A portable kernel can refuse a shape on one GPU (here an MLA decode kernel on the discrete card) and
 fall back silently to a slow path; log which kernel each layer takes.
+
+## Ling-3.2-air decode over USB4: an iGPU and an eGPU in one pipeline
+
+Setup: a Radeon 8060S iGPU (Strix Halo, 64 GB of system memory, 48 GB of it for the GPU) holding layers 0-30 and an
+RX 7900 XT 20 GB on USB4 holding layers 31-41; each token's activations cross between them through host memory (no
+peer access), 0.57 ms a token. Decode with each GPU's layers as one graph a token.
+
+| Step | Decode, drafting off | Decode, MTP drafting on (default) | Output |
+|---|---|---|---|
+| Baseline | 34.5 tok/s | 51.7 tok/s | |
+| Shared expert on the main stream, no event join (pattern l) | **44.7** | **64.2** | same ids |
+
+How it was found, and what the profile said on the way:
+- Per GPU and per part first (a sync at the end of each GPU's segment, graphs kept): iGPU 21.0 ms, eGPU 6.5 ms, hand-off
+  0.57 ms. The iGPU is the bottleneck.
+- Per kernel next (graphs off, a sync after each kernel), with each GPU's **sync floor** measured from the tiniest
+  kernels and subtracted: ~0.04 ms on the iGPU, ~0.1 ms on the USB4 card. Without subtracting it, every small kernel
+  looks slow on the eGPU.
+- Net of the floor, the iGPU's kernels ran near its bandwidth (dense projections ~100%, expert matvecs 58-74%). The sum
+  of kernel times was well below the graph's real time: the missing time was between kernels.
+- The layer's shared expert ran on a second stream, joined back with an event: inside a HIP graph on Windows that join
+  cost ~6 ms a token. Running it inline removed it. Fusing one more kernel a layer (the expert sum into the next norm,
+  exact) gave nothing measurable: a launch inside a graph was not the cost; the cross-stream wait was.
+- The verify path of speculative decoding had its own copy of the same join; fixing only the single-token path moved
+  drafting decode by 2%, fixing both by 24%.
+
+What did not help on this pair:
+- Moving layers from the iGPU to the eGPU: a layer cost ~0.6 ms on either GPU, although the eGPU has ~3.5x the
+  bandwidth - it is latency-bound there (higher per-kernel cost over USB4), so the split saves little, and one layer too
+  many pushed the eGPU out of VRAM (decode 34 -> 26 tok/s).
+- Draft depth 2 or 3 instead of the auto rule: within noise. A 3-token verify step cost ~1.5x a single token, because
+  each drafted token pulls in its own experts.
+
+## Porting CUDA code to HIP: two silent failures
+
+- **Capability checks.** Ling's vision tower chose BF16 or FP16 from `compute capability major >= 8`. On HIP that
+  attribute is the gfx major (11 on RDNA 3), so it kept the weights in BF16 while the HIP branch told the GEMMs FP16:
+  BF16 bits read as FP16. Nothing crashed and the embeddings had plausible magnitudes; the model simply could not see
+  the image (a half-red, half-blue picture became "black text on white"). Grep a CUDA codebase for capability checks
+  and data-type choices before trusting its HIP path, and test vision with a trivial image (two colours, a large
+  number) before a real one.
+- **Kernels enabled by architecture name.** The MLA decode kernel was on for gfx1151 only; on gfx1100 the model refused
+  its shape unless an environment variable forced it. Log which kernel each layer takes, and check every architecture
+  the build ships for.

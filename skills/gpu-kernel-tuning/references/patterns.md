@@ -96,6 +96,16 @@ scale, round to nearest) and put the parts back into one matrix. Not exact: the 
 the default only for the files it was gated on. It costs load time (single-threaded on the host: +9 s here).
 Here: 65 -> 82 tok/s, reference agreement unchanged within near ties.
 
+## l. Stream joins inside a graph
+
+Recognise: the per-kernel times (sync floor subtracted) add up to much less than the graph's time for the same work,
+and the code records an event on one stream and waits on it from another (side work such as a shared expert or a copy
+overlapped with the main chain). Inside a CUDA / HIP graph each such join is a dependency the runtime must resolve; on
+Windows HIP it cost ~6 ms a token for 40 joins (Ling, `case-study-2.md`).
+Run the side work on the main stream when it is small (the overlap was worth less than the join), keep the order of
+operations, and check the ids: exact. Check every path that builds a graph - single-token and speculative verify
+windows each had their own copy.
+
 ## When a smaller format does not help
 
 Compute bytes per token / bandwidth first. If the token time is several times that, decode is bound by per-step cost

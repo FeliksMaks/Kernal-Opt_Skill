@@ -56,6 +56,9 @@ No engine source, only serving flags? This skill does not apply. No correctness 
    - *First prompt against second.* Run the same prompt twice in one process. A big gap is start-up cost (4e).
    - *Runtime settings before kernels.* Prompt chunk size, batch and buffer sizes: a chunk of 4,096 tokens instead of 2,048 gave
      5-8% and no code. Check that it still fits in VRAM at the longest context.
+   - *Per GPU, then per kernel, minus the sync floor.* With several GPUs, time each GPU's segment first. Per kernel,
+     measure the floor (the smallest kernel with a sync) per GPU and subtract it: on an eGPU it was 0.1 ms, which makes
+     every small kernel look slow. If the kernels' sum is well under the graph's time, the cost is between them.
    - *Why a matrix kernel is under its peak*: `scripts/tile_layers.hip` adds barriers, decode and loads one at a time.
    - A profiler that synchronises after each kernel overstates small ones. Confirm with the A/B.
 
@@ -73,6 +76,7 @@ No engine source, only serving flags? This skill does not apply. No correctness 
    j. A new quant of the same model: give each of its weight formats a compiled kernel; the old list leaves them on the
       general path.
    k. Dense weights in a mix of formats: requantize to the fast path's format at load, gated, with a switch.
+   l. Graph time far above the sum of its kernels: look for event joins between streams; run small side work inline.
 
 5. **Check the output before you believe the speed.**
    - Same ids as the old build at every length: go on.
@@ -113,6 +117,11 @@ No engine source, only serving flags? This skill does not apply. No correctness 
 - Don't promise a speed-up from a smaller quant before you compare bytes per token with the token time
   (`references/case-study-2.md`). Where decode is bound by per-step cost, the smaller file only helps when it fits where the
   larger one does not.
+- Don't move layers to the faster card without measuring a layer's cost there: over USB4 a layer cost the same on the
+  eGPU as on the iGPU (latency, not bandwidth), and one layer too many pushed it out of VRAM.
+- Don't trust a CUDA codebase's capability checks on HIP (`major >= 8` is true on RDNA 3 and changes data-type paths),
+  and test any vision path with a trivial image first.
+- Don't let an override fail quietly: a layer-split variable whose total was off by one was ignored without a word.
 - Don't assume matrix-core tiles win for every product: with many experts and few rows each, a tile can be slower than
   the token-style kernel. Measure each matrix separately.
 
